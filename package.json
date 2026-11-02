@@ -1,0 +1,14 @@
+{
+  "name": "smappee-ev-card",
+  "version": "0.2.0",
+  "description": "Lovelace card for Smappee EV charging stations",
+  "scripts": {
+    "lint": "eslint smappee-ev-card.js",
+    "format": "prettier --write smappee-ev-card.js",
+    "format:check": "prettier --check smappee-ev-card.js"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0"
+  }
+}
