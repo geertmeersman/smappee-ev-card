@@ -34,6 +34,5 @@ device_id: <device_id>
 | Option | Default | Description |
 |---|---|---|
 | `device_id` | required | Smappee EV charging station device ID |
-| `show_session` | `true` | Active session info (power, current, energy, duration) |
-| `show_power` | `true` | Grid / PV / house power overview |
-| `show_controls` | `true` | Charging toggle and current slider |
+| `show_session` | `true` | Active session info (power, current, energy, phases) |
+| `show_power` | `true` | Grid / PV / house / EV power overview |

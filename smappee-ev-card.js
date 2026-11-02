@@ -1,4 +1,4 @@
-const VERSION = "0.1.8";
+const VERSION = "0.2.0";
 
 class SmappeeEvCard extends HTMLElement {
   constructor() {
@@ -11,10 +11,10 @@ class SmappeeEvCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement("smappee-ev-card-editor"); }
-  static getStubConfig() { return { device_id: "", show_session: true, show_power: true, show_controls: true }; }
+  static getStubConfig() { return { device_id: "", show_session: true, show_power: true }; }
 
   setConfig(config) {
-    this._config = { show_session: true, show_power: true, show_controls: true, ...config };
+    this._config = { show_session: true, show_power: true, ...config };
     this._entities = {};
     this._built = false;
     if (this._hass) this._update();
@@ -163,7 +163,6 @@ class SmappeeEvCard extends HTMLElement {
     const show = {
       session:  this._config.show_session !== false,
       power:    this._config.show_power !== false,
-      controls: this._config.show_controls !== false,
     };
     const sliderState = this._hass?.states[this._entities.current_slider];
     const sliderMin = sliderState?.attributes?.min ?? 6;
@@ -480,16 +479,25 @@ class SmappeeEvCardEditor extends HTMLElement {
     this.dispatchEvent(new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true }));
   }
 
+  _t(k) {
+    const lang = (this._hass?.locale?.language || "en").slice(0, 2).toLowerCase();
+    const nl = { show_session:"Sessie tonen", show_power:"Vermogen tonen", device:"Apparaat" };
+    const de = { show_session:"Sitzung anzeigen", show_power:"Leistung anzeigen", device:"Gerät" };
+    const fr = { show_session:"Afficher la session", show_power:"Afficher la puissance", device:"Appareil" };
+    const en = { show_session:"Show session", show_power:"Show power", device:"Device" };
+    return ({nl, de, fr}[lang] || en)[k] || en[k] || k;
+  }
+
   _render() {
     const devices = this._devices();
-    const toggles = [["show_session","Show session"],["show_power","Show power"],["show_controls","Show controls"]];
+    const toggles = [["show_session", this._t("show_session")],["show_power", this._t("show_power")]];
     this.innerHTML = `
       <style>
         label{font-size:0.85em;color:var(--secondary-text-color);display:block;margin-bottom:4px}
         select{width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);margin-bottom:12px;font-size:0.9em}
         .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.88em}
       </style>
-      <label>Device</label>
+      <label>${this._t("device")}</label>
       <select id="device-select">
         <option value="">— select —</option>
         ${devices.map(d => `<option value="${d.id}" ${this._config.device_id === d.id ? "selected" : ""}>${d.name}</option>`).join("")}
