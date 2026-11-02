@@ -6,6 +6,8 @@
 
 A Lovelace card for [Home Assistant](https://www.home-assistant.io/) that displays status, session info, power overview and controls for a [Smappee EV](https://www.smappee.com/) charging station.
 
+![screenshot](docs/images/screenshot.png)
+
 ## Requirements
 
 - [Smappee EV integration](https://github.com/geertmeersman/smappee_ev) installed
