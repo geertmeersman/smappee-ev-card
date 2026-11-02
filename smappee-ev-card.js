@@ -11,10 +11,10 @@ class SmappeeEvCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement("smappee-ev-card-editor"); }
-  static getStubConfig() { return { device_id: "", show_session: true, show_power: true, show_graph: true }; }
+  static getStubConfig() { return { device_id: "", show_session: true, show_power: true, show_graph: true, show_failsafe: true, show_station: true }; }
 
   setConfig(config) {
-    this._config = { show_session: true, show_power: true, show_graph: true, ...config };
+    this._config = { show_session: true, show_power: true, show_graph: true, show_failsafe: true, show_station: true, ...config };
     this._entities = {};
     this._built = false;
     this._graphCard = null;
@@ -44,6 +44,8 @@ class SmappeeEvCard extends HTMLElement {
     })();
     const forConnector = allEntities.filter(e => e.device_id === deviceId);
     const forSite      = allEntities.filter(e => e.device_id === siteDeviceId);
+    const stationDeviceId = allDevices[deviceId]?.via_device_id;
+    const forStation   = stationDeviceId ? allEntities.filter(e => e.device_id === stationDeviceId) : forConnector;
     const find = (list, k) => (list.find(e => e.entity_id.includes(k) || (e.translation_key && e.translation_key.includes(k))) || {}).entity_id;
     return {
       evse_status:     find(forConnector, "status_current"),
@@ -58,6 +60,11 @@ class SmappeeEvCard extends HTMLElement {
       current_slider:  find(forConnector, "max_charging_speed"),
       resume_charging: find(forConnector, "resume_charging"),
       surplus_slider:  find(forConnector, "min_surpluspct"),
+      failsafe_current:  find(forStation, "offline_failsafe_current"),
+      offline_charging:  find(forStation, "offline_charging"),
+      restart_station:   find(forStation, "restart_charging_station"),
+      led:               find(forStation, "led"),
+      station_available: find(forStation, "station_available"),
       grid_power:      find(forSite, "grid_power"),
       pv_power:        find(forSite, "pv_power"),
       house_power:     find(forSite, "house_consumption_power"),
@@ -76,25 +83,33 @@ class SmappeeEvCard extends HTMLElement {
       energy:"Energie", phases:"Fases", surplus:"Min. overschot", capacity:"Max. capaciteit", no_device:"Kies een device in de editor.",
       charging:"Laden", available:"Beschikbaar", cable_connected:"Kabel verbonden",
       charging_finished:"Laden voltooid", error:"Fout", suspended_evse:"Onderbroken",
-      initialize:"Initialiseren", start:"Start", pause:"Pauzeer het laden", resume:"Hervat het laden", stop:"Stop" };
+      initialize:"Initialiseren", start:"Start", pause:"Pauzeer het laden", resume:"Hervat het laden", stop:"Stop",
+      failsafe:"Noodstroom", failsafe_current:"Noodstroom limiet", offline_charging:"Laden zonder verbinding",
+      station:"Station", restart:"Herstart station", led:"LED", station_available:"Station beschikbaar" };
     const de = { standard:"Standard", smart:"Smart", solar:"Solarenergie", session:"Sitzung",
       power:"Leistung", grid:"Netz", pv:"PV", house:"Haus", ev:"EV", current:"Strom",
       energy:"Energie", phases:"Phasen", surplus:"Min. Überschuss", capacity:"Max. Kapazität", no_device:"Gerät im Editor auswählen.",
       charging:"Lädt", available:"Verfügbar", cable_connected:"Kabel angeschlossen",
       charging_finished:"Ladevorgang abgeschlossen", error:"Fehler", suspended_evse:"Vom Ladegerät pausiert",
-      initialize:"Initialisierung", start:"Start", pause:"Pause", resume:"Fortsetzen", stop:"Stopp" };
+      initialize:"Initialisierung", start:"Start", pause:"Pause", resume:"Fortsetzen", stop:"Stopp",
+      failsafe:"Ausfallsicherung", failsafe_current:"Ausfallstrom", offline_charging:"Laden ohne Verbindung",
+      station:"Station", restart:"Station neu starten", led:"LED", station_available:"Station verfügbar" };
     const fr = { standard:"Standard", smart:"Intelligent", solar:"Solaire", session:"Session",
       power:"Puissance", grid:"Réseau", pv:"PV", house:"Maison", ev:"VE", current:"Courant",
       energy:"Énergie", phases:"Phases", surplus:"Surplus min.", capacity:"Capacité max.", no_device:"Choisissez un appareil dans l'éditeur.",
       charging:"En charge", available:"Disponible", cable_connected:"Câble connecté",
       charging_finished:"Charge terminée", error:"Erreur", suspended_evse:"Suspendu par le chargeur",
-      initialize:"Initialisation", start:"Démarrer", pause:"Pause", resume:"Reprendre", stop:"Arrêter" };
+      initialize:"Initialisation", start:"Démarrer", pause:"Pause", resume:"Reprendre", stop:"Arrêter",
+      failsafe:"Sécurité hors ligne", failsafe_current:"Courant de secours", offline_charging:"Charge hors ligne",
+      station:"Station", restart:"Redémarrer la station", led:"LED", station_available:"Station disponible" };
     const en = { standard:"Standard", smart:"Smart", solar:"Solar", session:"Session",
       power:"Power", grid:"Grid", pv:"PV", house:"House", ev:"EV", current:"Current",
       energy:"Energy", phases:"Phases", surplus:"Min. surplus", capacity:"Max. capacity", no_device:"Pick a device in the editor.",
       charging:"Charging", available:"Available", cable_connected:"Cable connected",
       charging_finished:"Charging finished", error:"Error", suspended_evse:"Suspended",
-      initialize:"Initializing", start:"Start", pause:"Pause", resume:"Resume", stop:"Stop" };
+      initialize:"Initializing", start:"Start", pause:"Pause", resume:"Resume", stop:"Stop",
+      failsafe:"Failsafe", failsafe_current:"Failsafe current", offline_charging:"Offline charging",
+      station:"Station", restart:"Restart station", led:"LED", station_available:"Station available" };
     return ({nl, de, fr}[lang] || en)[k] || en[k] || k;
   }
 
@@ -165,6 +180,8 @@ class SmappeeEvCard extends HTMLElement {
       session:  this._config.show_session !== false,
       power:    this._config.show_power !== false,
       graph:    this._config.show_graph !== false,
+      failsafe: this._config.show_failsafe !== false,
+      station:  this._config.show_station !== false,
     };
     const sliderState = this._hass?.states[this._entities.current_slider];
     const sliderMin = sliderState?.attributes?.min ?? 6;
@@ -181,6 +198,8 @@ class SmappeeEvCard extends HTMLElement {
           .header-sub{font-size:0.8em;color:var(--secondary-text-color)}
           .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:600}
           .mqtt-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+          .clickable{cursor:pointer;}
+          .clickable:hover{opacity:0.8;}
           .section{padding:10px 14px;border-bottom:1px solid var(--divider-color)}
           .section:last-child{border-bottom:none}
           .section-label{font-size:0.72em;font-weight:700;color:var(--secondary-text-color);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px}
@@ -210,7 +229,7 @@ class SmappeeEvCard extends HTMLElement {
             <img src="/hacsfiles/smappee-ev-card/icon.png" style="width:28px;height:28px;flex-shrink:0;border-radius:4px" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><ha-icon icon="mdi:ev-station" style="--mdc-icon-size:28px;color:var(--primary-color);flex-shrink:0;display:none"></ha-icon>
             <div class="header-info">
               <div class="header-name" id="dev-name"></div>
-              <div class="header-sub"><span class="badge" id="evse-badge"></span></div>
+              <div class="header-sub"><span class="badge clickable" id="evse-badge"></span></div>
             </div>
             <div style="display:flex;align-items:center;gap:4px;font-size:0.75em;color:var(--secondary-text-color);flex-shrink:0">
               <span class="mqtt-dot" id="mqtt-dot"></span>MQTT
@@ -260,40 +279,41 @@ class SmappeeEvCard extends HTMLElement {
           </div>
 
           ${show.graph ? `
-          <div class="section" id="graph-section" style="padding:0">
+          <div class="section" id="graph-section" style="padding:0;position:relative;cursor:pointer" id="graph-click-area">
             <div id="power-graph-container"></div>
+            <div id="graph-overlay" style="position:absolute;inset:0;z-index:1"></div>
           </div>` : ""}
 
           ${show.session ? `
           <div class="section" id="session-section">
             <div class="section-label">${this._t("session")}</div>
             <div class="session-grid">
-              <div><div class="session-val" id="s-power">—</div><div class="session-key">${this._t("power")}</div></div>
-              <div><div class="session-val" id="s-current">—</div><div class="session-key">${this._t("current")}</div></div>
-              <div><div class="session-val" id="s-energy">—</div><div class="session-key">${this._t("energy")}</div></div>
-              <div><div class="session-val" id="s-phases">—</div><div class="session-key">${this._t("phases")}</div></div>
-              <div style="grid-column:1/-1"><div class="session-val" id="s-rfid" style="font-size:0.85em">—</div><div class="session-key">RFID</div></div>
+              <div class="clickable" id="si-power"><div class="session-val" id="s-power">—</div><div class="session-key">${this._t("power")}</div></div>
+              <div class="clickable" id="si-current"><div class="session-val" id="s-current">—</div><div class="session-key">${this._t("current")}</div></div>
+              <div class="clickable" id="si-energy"><div class="session-val" id="s-energy">—</div><div class="session-key">${this._t("energy")}</div></div>
+              <div class="clickable" id="si-phases"><div class="session-val" id="s-phases">—</div><div class="session-key">${this._t("phases")}</div></div>
+              <div class="clickable" style="grid-column:1/-1" id="si-rfid"><div class="session-val" id="s-rfid" style="font-size:0.85em">—</div><div class="session-key">RFID</div></div>
             </div>
           </div>` : ""}
 
           ${show.power ? `
           <div class="section">
-            <div class="power-row">
+            <div class="power-row clickable" id="p-grid-row">
               <ha-icon icon="mdi:transmission-tower" style="color:var(--primary-color)"></ha-icon>
               <span class="power-label">${this._t("grid")}</span>
               <span class="power-val" id="p-grid">—</span>
             </div>
-            <div class="power-row">
+            <div class="power-row clickable" id="p-pv-row">
               <ha-icon icon="mdi:solar-power" style="color:var(--warning-color,#e0956a)"></ha-icon>
               <span class="power-label">${this._t("pv")}</span>
               <span class="power-val" id="p-pv">—</span>
             </div>
-            <div class="power-row">
+            <div class="power-row clickable" id="p-house-row">
               <ha-icon icon="mdi:home" style="color:var(--secondary-text-color)"></ha-icon>
               <span class="power-label">${this._t("house")}</span>
               <span class="power-val" id="p-house">—</span>
             </div>
-            <div class="power-row">
+            <div class="power-row clickable" id="p-ev-row">
               <ha-icon icon="mdi:car-electric" style="color:var(--success-color,#4caf50)"></ha-icon>
               <span class="power-label">${this._t("ev")}</span>
               <span class="power-val" id="p-ev">—</span>
@@ -302,6 +322,43 @@ class SmappeeEvCard extends HTMLElement {
               <ha-icon icon="mdi:transmission-tower-export" style="color:var(--secondary-text-color)"></ha-icon>
               <span class="power-label">${this._t("capacity")}</span>
               <span class="power-val" id="p-capacity">—</span>
+            </div>
+          </div>` : ""}
+
+          ${show.failsafe ? `
+          <div class="section" id="failsafe-section">
+            <div class="section-label">${this._t("failsafe")}</div>
+            <div class="power-row" id="fs-slider-wrap">
+              <ha-icon icon="mdi:current-ac" style="color:var(--secondary-text-color)"></ha-icon>
+              <span class="power-label">${this._t("failsafe_current")}</span>
+              <div style="display:flex;align-items:center;gap:8px;flex:1;justify-content:flex-end">
+                <span class="power-val" id="fs-current-val">—</span>
+                <input type="range" id="fs-current-slider" min="0" max="32" step="1" style="width:100px;accent-color:var(--primary-color)">
+              </div>
+            </div>
+            <div class="power-row" id="fs-offline-row" style="cursor:pointer">
+              <ha-icon icon="mdi:power-plug-off" style="color:var(--secondary-text-color)"></ha-icon>
+              <span class="power-label">${this._t("offline_charging")}</span>
+              <ha-switch id="fs-offline-switch"></ha-switch>
+            </div>
+          </div>` : ""}
+
+          ${show.station ? `
+          <div class="section" id="station-section">
+            <div class="section-label">${this._t("station")}</div>
+            <div class="power-row" id="st-restart-row" style="cursor:pointer">
+              <ha-icon icon="mdi:restart" style="color:var(--secondary-text-color)"></ha-icon>
+              <span class="power-label">${this._t("restart")}</span>
+            </div>
+            <div class="power-row" id="st-led-row" style="cursor:pointer">
+              <ha-icon icon="mdi:led-on" style="color:var(--secondary-text-color)"></ha-icon>
+              <span class="power-label">${this._t("led")}</span>
+              <ha-switch id="st-led-switch"></ha-switch>
+            </div>
+            <div class="power-row" id="st-available-row" style="cursor:pointer">
+              <ha-icon icon="mdi:ev-station" style="color:var(--secondary-text-color)"></ha-icon>
+              <span class="power-label">${this._t("station_available")}</span>
+              <ha-switch id="st-available-switch"></ha-switch>
             </div>
           </div>` : ""}
 
@@ -316,6 +373,48 @@ class SmappeeEvCard extends HTMLElement {
     this.querySelector("#btn-resume")?.addEventListener("click", () => this._callButton("resume_charging"));
     this.querySelector("#btn-stop")?.addEventListener("click",  () => this._callSwitch("turn_off"));
     this.querySelector("#p-capacity-row")?.addEventListener("click", () => this._moreInfo(this._entities.capacity_power));
+    this.querySelector("#graph-overlay")?.addEventListener("click", () => this._moreInfo(this._entities.power));
+    this.querySelector("#evse-badge")?.addEventListener("click", () => this._moreInfo(this._entities.evse_status));
+    this.querySelector("#si-power")?.addEventListener("click", () => this._moreInfo(this._entities.power));
+    this.querySelector("#si-current")?.addEventListener("click", () => this._moreInfo(this._entities.current));
+    this.querySelector("#si-energy")?.addEventListener("click", () => this._moreInfo(this._entities.session_energy));
+    this.querySelector("#si-phases")?.addEventListener("click", () => this._moreInfo(this._entities.current_l1));
+    this.querySelector("#si-rfid")?.addEventListener("click", () => this._moreInfo(this._entities.session_energy));
+    this.querySelector("#p-grid-row")?.addEventListener("click", () => this._moreInfo(this._entities.grid_power));
+    this.querySelector("#p-pv-row")?.addEventListener("click", () => this._moreInfo(this._entities.pv_power));
+    this.querySelector("#p-house-row")?.addEventListener("click", () => this._moreInfo(this._entities.house_power));
+    this.querySelector("#p-ev-row")?.addEventListener("click", () => this._moreInfo(this._entities.power));
+
+    // Failsafe slider
+    const fsSlider = this.querySelector("#fs-current-slider");
+    if (fsSlider) {
+      let debounce;
+      fsSlider.addEventListener("pointerdown", () => { this._sliding = true; });
+      fsSlider.addEventListener("pointerup",   () => { this._sliding = false; });
+      fsSlider.addEventListener("input", ev => {
+        const val = parseInt(ev.target.value);
+        this.querySelector("#fs-current-val").textContent = `${val} A`;
+        clearTimeout(debounce);
+        debounce = setTimeout(() => {
+          const id = this._entities.failsafe_current;
+          if (!id) return;
+          this._hass.callService(id.split(".")[0], "set_value", { entity_id: id, value: val });
+        }, 500);
+      });
+    }
+    this.querySelector("#fs-offline-switch")?.addEventListener("change", ev => {
+      const id = this._entities.offline_charging;
+      if (id) this._hass.callService("switch", ev.target.checked ? "turn_on" : "turn_off", { entity_id: id });
+    });
+    this.querySelector("#st-restart-row")?.addEventListener("click", () => this._callButton("restart_station"));
+    this.querySelector("#st-led-switch")?.addEventListener("change", ev => {
+      const id = this._entities.led;
+      if (id) this._hass.callService("light", ev.target.checked ? "turn_on" : "turn_off", { entity_id: id });
+    });
+    this.querySelector("#st-available-switch")?.addEventListener("change", ev => {
+      const id = this._entities.station_available;
+      if (id) this._hass.callService("switch", ev.target.checked ? "turn_on" : "turn_off", { entity_id: id });
+    });
 
     const slider = this.querySelector("#current-slider");
     if (slider) {
@@ -476,7 +575,33 @@ class SmappeeEvCard extends HTMLElement {
         const lv = this.querySelector("#surplus-label-val");
         if (lv) lv.textContent = `${surplusVal} %`;
       }
+
+      // Failsafe slider
+      const fsSlider = this.querySelector("#fs-current-slider");
+      const fsVal = this._val(e.failsafe_current);
+      if (fsSlider && fsVal !== null) {
+        const fsState = this._hass?.states[e.failsafe_current];
+        fsSlider.min = fsState?.attributes?.min ?? 0;
+        fsSlider.max = fsState?.attributes?.max ?? 32;
+        fsSlider.value = fsVal;
+        const fv = this.querySelector("#fs-current-val");
+        if (fv) fv.textContent = `${Math.round(parseFloat(fsVal))} A`;
+      }
     }
+
+    const fsSwitch = this.querySelector("#fs-offline-switch");
+    const ledSwitch = this.querySelector("#st-led-switch");
+    const availSwitch = this.querySelector("#st-available-switch");
+    const offlineOn = this._val(e.offline_charging) === "on";
+    const ledOn = this._val(e.led) === "on";
+    const availOn = this._val(e.station_available) === "on";
+    const fsSliderWrap = this.querySelector("#fs-slider-wrap");
+    if (fsSliderWrap) fsSliderWrap.style.display = offlineOn ? "" : "none";
+    customElements.whenDefined("ha-switch").then(() => {
+      if (fsSwitch) fsSwitch.checked = offlineOn;
+      if (ledSwitch) ledSwitch.checked = ledOn;
+      if (availSwitch) availSwitch.checked = availOn;
+    });
   }
 
   getCardSize() { return 4; }
@@ -517,16 +642,16 @@ class SmappeeEvCardEditor extends HTMLElement {
 
   _t(k) {
     const lang = (this._hass?.locale?.language || "en").slice(0, 2).toLowerCase();
-    const nl = { show_session:"Sessie tonen", show_power:"Vermogen tonen", show_graph:"Grafiek tonen", device:"Apparaat" };
-    const de = { show_session:"Sitzung anzeigen", show_power:"Leistung anzeigen", show_graph:"Diagramm anzeigen", device:"Gerät" };
-    const fr = { show_session:"Afficher la session", show_power:"Afficher la puissance", show_graph:"Afficher le graphique", device:"Appareil" };
-    const en = { show_session:"Show session", show_power:"Show power", show_graph:"Show graph", device:"Device" };
+    const nl = { show_session:"Sessie tonen", show_power:"Vermogen tonen", show_graph:"Grafiek tonen", show_failsafe:"Noodstroom tonen", show_station:"Station tonen", device:"Apparaat" };
+    const de = { show_session:"Sitzung anzeigen", show_power:"Leistung anzeigen", show_graph:"Diagramm anzeigen", show_failsafe:"Ausfallsicherung anzeigen", show_station:"Station anzeigen", device:"Gerät" };
+    const fr = { show_session:"Afficher la session", show_power:"Afficher la puissance", show_graph:"Afficher le graphique", show_failsafe:"Afficher la sécurité", show_station:"Afficher la station", device:"Appareil" };
+    const en = { show_session:"Show session", show_power:"Show power", show_graph:"Show graph", show_failsafe:"Show failsafe", show_station:"Show station", device:"Device" };
     return ({nl, de, fr}[lang] || en)[k] || en[k] || k;
   }
 
   _render() {
     const devices = this._devices();
-    const toggles = [["show_graph", this._t("show_graph")],["show_session", this._t("show_session")],["show_power", this._t("show_power")]];
+    const toggles = [["show_graph", this._t("show_graph")],["show_session", this._t("show_session")],["show_power", this._t("show_power")],["show_failsafe", this._t("show_failsafe")],["show_station", this._t("show_station")]];
     this.innerHTML = `
       <style>
         label{font-size:0.85em;color:var(--secondary-text-color);display:block;margin-bottom:4px}
