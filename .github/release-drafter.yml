@@ -1,0 +1,67 @@
+name-template: 'Release v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+categories:
+  - title: '🚀 New features'
+    semver-increment: minor
+    when:
+      - labels:
+          - enhancement
+          - feat
+          - feature
+  - title: '🐛 Bug fixes'
+    semver-increment: patch
+    when:
+      - labels:
+          - bug
+          - fix
+  - title: '⚠️ Breaking'
+    semver-increment: major
+    when:
+      - labels:
+          - breaking
+  - title: '🔒 Security'
+    semver-increment: patch
+    when:
+      - labels:
+          - security
+  - title: '📦 Dependencies'
+    semver-increment: patch
+    when:
+      - labels:
+          - dependencies
+  - title: '🔧 Maintenance'
+    semver-increment: patch
+    when:
+      - labels:
+          - chore
+          - ci
+          - refactor
+  - title: '📖 Documentation'
+    semver-increment: patch
+    when:
+      - labels:
+          - docs
+          - doc
+          - documentation
+  - type: pre-exclude
+    when:
+      - labels:
+          - skip-changelog
+change-template: '- $TITLE (#$NUMBER) @$AUTHOR'
+change-title-escapes: '\<*_&'
+template: |
+  [![maintainer](https://img.shields.io/badge/maintainer-Geert%20Meersman-green?style=for-the-badge&logo=github)](https://github.com/geertmeersman)
+  [![buyme_coffee](https://img.shields.io/badge/Buy%20me%20an%20Omer-donate-yellow?style=for-the-badge&logo=buymeacoffee)](https://www.buymeacoffee.com/geertmeersman)
+
+  ## What's changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+  ---
+  🙏 Thanks to $CONTRIBUTORS for contributing to this release!
+exclude-contributors:
+  - geertmeersman[bot]
+  - dependabot[bot]
+  - github-actions[bot]

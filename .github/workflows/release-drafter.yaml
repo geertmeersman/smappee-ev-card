@@ -1,0 +1,41 @@
+name: Release Drafter
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: release-drafter
+  cancel-in-progress: true
+
+jobs:
+  update_release_draft:
+    name: ✏️ Draft release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🗑 Delete Release drafts
+        uses: hugo19941994/delete-draft-releases@v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🚀 Run Release Drafter
+        id: release_drafter
+        uses: release-drafter/release-drafter@v7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          commitish: ${{ github.ref }}
+
+      - name: 🗑 Delete empty draft
+        if: contains(steps.release_drafter.outputs.body, '* No changes')
+        run: gh release delete "${{ steps.release_drafter.outputs.tag_name }}" --yes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

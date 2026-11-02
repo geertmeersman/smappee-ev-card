@@ -1,0 +1,74 @@
+name: Release - Bump and Release 🚀
+on: [workflow_dispatch]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Create and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⤵️ Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: 🔢 Get version from draft release
+        id: semver
+        run: |
+          tag=$(gh release list --json tagName,isDraft -q '.[] | select(.isDraft == true) | .tagName' | head -1)
+          echo "next=$tag" >> $GITHUB_OUTPUT
+          echo "Next version: $tag"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🗑 Delete drafts
+        uses: hugo19941994/delete-draft-releases@v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🧾 Display version info
+        run: |
+          echo "Next version: $NEXT_VERSION"
+        env:
+          NEXT_VERSION: ${{ steps.semver.outputs.next }}
+
+      - name: 🔄 Update version in JS file
+        env:
+          tag_name: ${{ steps.semver.outputs.next }}
+        run: |
+          echo $tag_name > VERSION
+
+      - name: 📝 Publish release
+        uses: release-drafter/release-drafter@v7
+        id: release_published
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: ${{ steps.semver.outputs.next }}
+          tag: ${{ steps.semver.outputs.next }}
+          publish: true
+
+      - name: ✅ Commit version bump
+        uses: EndBug/add-and-commit@v9
+        with:
+          add: "VERSION"
+          message: "chore(release): bump version to ${{ steps.semver.outputs.next }}"
+          push: true
+
+      - name: 🚮 Remove pre-releases
+        run: |
+          gh release list --json tagName,isPrerelease -q '.[] | select(.isPrerelease == true) | .tagName' | while read -r tag_name; do
+            gh release delete "$tag_name" --yes
+            git push origin --delete "$tag_name" || true
+            git tag -d "$tag_name" || true
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
