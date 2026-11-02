@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import globals from "globals";
 
 export default [
   js.configs.recommended,
@@ -9,11 +10,7 @@ export default [
     },
     languageOptions: {
       globals: {
-        window: "readonly",
-        document: "readonly",
-        customElements: "readonly",
-        HTMLElement: "readonly",
-        CustomEvent: "readonly",
+        ...globals.browser,
       },
     },
   },
