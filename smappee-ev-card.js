@@ -11,12 +11,13 @@ class SmappeeEvCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement("smappee-ev-card-editor"); }
-  static getStubConfig() { return { device_id: "", show_session: true, show_power: true }; }
+  static getStubConfig() { return { device_id: "", show_session: true, show_power: true, show_graph: true }; }
 
   setConfig(config) {
-    this._config = { show_session: true, show_power: true, ...config };
+    this._config = { show_session: true, show_power: true, show_graph: true, ...config };
     this._entities = {};
     this._built = false;
+    this._graphCard = null;
     if (this._hass) this._update();
   }
 
@@ -163,6 +164,7 @@ class SmappeeEvCard extends HTMLElement {
     const show = {
       session:  this._config.show_session !== false,
       power:    this._config.show_power !== false,
+      graph:    this._config.show_graph !== false,
     };
     const sliderState = this._hass?.states[this._entities.current_slider];
     const sliderMin = sliderState?.attributes?.min ?? 6;
@@ -257,6 +259,11 @@ class SmappeeEvCard extends HTMLElement {
             </div>
           </div>
 
+          ${show.graph ? `
+          <div class="section" id="graph-section" style="padding:0">
+            <div id="power-graph-container"></div>
+          </div>` : ""}
+
           ${show.session ? `
           <div class="section" id="session-section">
             <div class="section-label">${this._t("session")}</div>
@@ -265,6 +272,7 @@ class SmappeeEvCard extends HTMLElement {
               <div><div class="session-val" id="s-current">—</div><div class="session-key">${this._t("current")}</div></div>
               <div><div class="session-val" id="s-energy">—</div><div class="session-key">${this._t("energy")}</div></div>
               <div><div class="session-val" id="s-phases">—</div><div class="session-key">${this._t("phases")}</div></div>
+              <div style="grid-column:1/-1"><div class="session-val" id="s-rfid" style="font-size:0.85em">—</div><div class="session-key">RFID</div></div>
             </div>
           </div>` : ""}
 
@@ -390,6 +398,34 @@ class SmappeeEvCard extends HTMLElement {
         const phases = [e.current_l1, e.current_l2, e.current_l3]
           .filter(id => parseFloat(this._val(id)) > 0).length;
         this.querySelector("#s-phases").textContent  = phases > 0 ? `${phases}` : "—";
+        const rfid = this._attr(e.session_energy, "rfid");
+        this.querySelector("#s-rfid").textContent = rfid || "—";
+      }
+    }
+
+    // Graph
+    const graphContainer = this.querySelector("#power-graph-container");
+    if (graphContainer && this._entities.power) {
+      if (!this._graphCard) {
+        (async () => {
+          const helpers = await window.loadCardHelpers();
+          this._graphCard = await helpers.createCardElement({
+            type: "custom:mini-graph-card",
+            entities: [{ entity: this._entities.power }],
+            hours_to_show: 24,
+            points_per_hour: 4,
+            line_width: 2,
+            smoothing: true,
+            group: true,
+            show: { legend: false, name: false, icon: false, state: false, labels: false },
+            color: "orange",
+            height: 60,
+          });
+          this._graphCard.hass = this._hass;
+          graphContainer.appendChild(this._graphCard);
+        })();
+      } else {
+        this._graphCard.hass = this._hass;
       }
     }
 
@@ -481,16 +517,16 @@ class SmappeeEvCardEditor extends HTMLElement {
 
   _t(k) {
     const lang = (this._hass?.locale?.language || "en").slice(0, 2).toLowerCase();
-    const nl = { show_session:"Sessie tonen", show_power:"Vermogen tonen", device:"Apparaat" };
-    const de = { show_session:"Sitzung anzeigen", show_power:"Leistung anzeigen", device:"Gerät" };
-    const fr = { show_session:"Afficher la session", show_power:"Afficher la puissance", device:"Appareil" };
-    const en = { show_session:"Show session", show_power:"Show power", device:"Device" };
+    const nl = { show_session:"Sessie tonen", show_power:"Vermogen tonen", show_graph:"Grafiek tonen", device:"Apparaat" };
+    const de = { show_session:"Sitzung anzeigen", show_power:"Leistung anzeigen", show_graph:"Diagramm anzeigen", device:"Gerät" };
+    const fr = { show_session:"Afficher la session", show_power:"Afficher la puissance", show_graph:"Afficher le graphique", device:"Appareil" };
+    const en = { show_session:"Show session", show_power:"Show power", show_graph:"Show graph", device:"Device" };
     return ({nl, de, fr}[lang] || en)[k] || en[k] || k;
   }
 
   _render() {
     const devices = this._devices();
-    const toggles = [["show_session", this._t("show_session")],["show_power", this._t("show_power")]];
+    const toggles = [["show_graph", this._t("show_graph")],["show_session", this._t("show_session")],["show_power", this._t("show_power")]];
     this.innerHTML = `
       <style>
         label{font-size:0.85em;color:var(--secondary-text-color);display:block;margin-bottom:4px}
