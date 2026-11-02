@@ -20,32 +20,10 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
-      - name: 🔢 Get version from draft release
-        id: semver
-        run: |
-          tag=$(gh release list --json tagName,isDraft -q '.[] | select(.isDraft == true) | .tagName' | head -1)
-          echo "next=$tag" >> $GITHUB_OUTPUT
-          echo "Next version: $tag"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: 🗑 Delete drafts
         uses: hugo19941994/delete-draft-releases@v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🧾 Display version info
-        run: |
-          echo "Next version: $NEXT_VERSION"
-        env:
-          NEXT_VERSION: ${{ steps.semver.outputs.next }}
-
-      - name: 🔄 Update version in JS file
-        env:
-          tag_name: ${{ steps.semver.outputs.next }}
-        run: |
-          echo $tag_name > VERSION
-          sed -i "s/const VERSION = \".*\"/const VERSION = \"${tag_name#v}\"/" smappee-ev-card.js
 
       - name: 📝 Publish release
         uses: release-drafter/release-drafter@v7
@@ -53,13 +31,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: ${{ steps.semver.outputs.next }}
-          tag: ${{ steps.semver.outputs.next }}
           publish: true
+
+      - name: 🔄 Update version in JS and VERSION file
+        run: |
+          TAG=${{ steps.release_published.outputs.tag_name }}
+          echo $TAG > VERSION
+          sed -i "s/const VERSION = \".*\"/const VERSION = \"${TAG#v}\"/" smappee-ev-card.js
+          echo "Updated to version: ${TAG#v}"
 
       - name: 📦 Upload release assets
         run: |
-          gh release upload ${{ steps.semver.outputs.next }} smappee-ev-card.js icon.png --clobber
+          gh release upload ${{ steps.release_published.outputs.tag_name }} smappee-ev-card.js icon.png --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -67,7 +50,7 @@ jobs:
         uses: EndBug/add-and-commit@v9
         with:
           add: "VERSION smappee-ev-card.js"
-          message: "chore(release): bump version to ${{ steps.semver.outputs.next }}"
+          message: "chore(release): bump version to ${{ steps.release_published.outputs.tag_name }}"
           push: true
 
       - name: 🚮 Remove pre-releases
