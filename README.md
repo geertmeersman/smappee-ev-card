@@ -36,5 +36,6 @@ device_id: <device_id>
 | Option | Default | Description |
 |---|---|---|
 | `device_id` | required | Smappee EV charging station device ID |
-| `show_session` | `true` | Active session info (power, current, energy, phases) |
+| `show_graph` | `true` | Power trend graph (requires [mini-graph-card](https://github.com/kalkih/mini-graph-card)) |
+| `show_session` | `true` | Active session info (power, current, energy, phases, RFID) |
 | `show_power` | `true` | Grid / PV / house / EV power overview |
