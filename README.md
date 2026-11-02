@@ -10,7 +10,7 @@ A Lovelace card for [Home Assistant](https://www.home-assistant.io/) that displa
 
 ## Requirements
 
-- [Smappee EV integration](https://github.com/geertmeersman/smappee_ev) installed
+- [Smappee EV integration](https://github.com/myny-git/smappee_ev) installed
 
 ## Installation via HACS
 
