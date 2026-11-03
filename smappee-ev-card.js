@@ -1,4 +1,4 @@
-const VERSION = "0.2.0";
+const VERSION = "0.0.6";
 
 class SmappeeEvCard extends HTMLElement {
   constructor() {
