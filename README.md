@@ -39,3 +39,6 @@ device_id: <device_id>
 | `show_graph` | `true` | Power trend graph (requires [mini-graph-card](https://github.com/kalkih/mini-graph-card)) |
 | `show_session` | `true` | Active session info (power, current, energy, phases, RFID) |
 | `show_power` | `true` | Grid / PV / house / EV power overview |
+| `show_failsafe` | `true` | Failsafe current and offline charging controls |
+| `show_station` | `true` | Station controls (restart, LED, availability) |
+| `car_battery_entity` | _(none)_ | Optional entity (`device_class: battery`) to show a battery progress bar below the header |
