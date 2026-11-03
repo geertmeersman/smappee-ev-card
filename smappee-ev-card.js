@@ -1,4 +1,4 @@
-const VERSION = "0.0.6";
+const VERSION = "0.2.0";
 
 class SmappeeEvCard extends HTMLElement {
   constructor() {
@@ -8,6 +8,7 @@ class SmappeeEvCard extends HTMLElement {
     this._entities = {};
     this._built = false;
     this._sliding = false;
+    this._durationTimer = null;
   }
 
   static getConfigElement() { return document.createElement("smappee-ev-card-editor"); }
@@ -84,7 +85,7 @@ class SmappeeEvCard extends HTMLElement {
       charging:"Laden", available:"Beschikbaar", cable_connected:"Kabel verbonden",
       charging_finished:"Laden voltooid", error:"Fout", suspended_evse:"Onderbroken",
       initialize:"Initialiseren", start:"Start", pause:"Pauzeer het laden", resume:"Hervat het laden", stop:"Stop",
-      charging_at:"Bezig met laden aan",
+      charging_at:"Bezig met laden aan", duration:"Duur",
       failsafe:"Noodstroom", failsafe_current:"Noodstroom limiet", offline_charging:"Laden zonder verbinding",
       station:"Station", restart:"Herstart station", led:"LED", station_available:"Station beschikbaar" };
     const de = { standard:"Standard", smart:"Smart", solar:"Solarenergie", session:"Sitzung",
@@ -93,7 +94,7 @@ class SmappeeEvCard extends HTMLElement {
       charging:"Lädt", available:"Verfügbar", cable_connected:"Kabel angeschlossen",
       charging_finished:"Ladevorgang abgeschlossen", error:"Fehler", suspended_evse:"Vom Ladegerät pausiert",
       initialize:"Initialisierung", start:"Start", pause:"Pause", resume:"Fortsetzen", stop:"Stopp",
-      charging_at:"Lädt mit",
+      charging_at:"Lädt mit", duration:"Dauer",
       failsafe:"Ausfallsicherung", failsafe_current:"Ausfallstrom", offline_charging:"Laden ohne Verbindung",
       station:"Station", restart:"Station neu starten", led:"LED", station_available:"Station verfügbar" };
     const fr = { standard:"Standard", smart:"Intelligent", solar:"Solaire", session:"Session",
@@ -102,7 +103,7 @@ class SmappeeEvCard extends HTMLElement {
       charging:"En charge", available:"Disponible", cable_connected:"Câble connecté",
       charging_finished:"Charge terminée", error:"Erreur", suspended_evse:"Suspendu par le chargeur",
       initialize:"Initialisation", start:"Démarrer", pause:"Pause", resume:"Reprendre", stop:"Arrêter",
-      charging_at:"En charge à",
+      charging_at:"En charge à", duration:"Durée",
       failsafe:"Sécurité hors ligne", failsafe_current:"Courant de secours", offline_charging:"Charge hors ligne",
       station:"Station", restart:"Redémarrer la station", led:"LED", station_available:"Station disponible" };
     const en = { standard:"Standard", smart:"Smart", solar:"Solar", session:"Session",
@@ -111,7 +112,7 @@ class SmappeeEvCard extends HTMLElement {
       charging:"Charging", available:"Available", cable_connected:"Cable connected",
       charging_finished:"Charging finished", error:"Error", suspended_evse:"Suspended",
       initialize:"Initializing", start:"Start", pause:"Pause", resume:"Resume", stop:"Stop",
-      charging_at:"Charging at",
+      charging_at:"Charging at", duration:"Duration",
       failsafe:"Failsafe", failsafe_current:"Failsafe current", offline_charging:"Offline charging",
       station:"Station", restart:"Restart station", led:"LED", station_available:"Station available" };
     return ({nl, de, fr}[lang] || en)[k] || en[k] || k;
@@ -307,7 +308,8 @@ class SmappeeEvCard extends HTMLElement {
               <div class="clickable" id="si-current"><div class="session-val" id="s-current">—</div><div class="session-key">${this._t("current")}</div></div>
               <div class="clickable" id="si-energy"><div class="session-val" id="s-energy">—</div><div class="session-key">${this._t("energy")}</div></div>
               <div class="clickable" id="si-phases"><div class="session-val" id="s-phases">—</div><div class="session-key">${this._t("phases")}</div></div>
-              <div class="clickable" style="grid-column:1/-1" id="si-rfid"><div class="session-val" id="s-rfid" style="font-size:0.85em">—</div><div class="session-key">RFID</div></div>
+              <div class="clickable" id="si-duration"><div class="session-val" id="s-duration" style="font-size:0.95em">—</div><div class="session-key">${this._t("duration")}</div></div>
+              <div class="clickable" id="si-rfid"><div class="session-val" id="s-rfid" style="font-size:0.85em">—</div><div class="session-key">RFID</div></div>
             </div>
           </div>` : ""}
 
@@ -396,6 +398,7 @@ class SmappeeEvCard extends HTMLElement {
     this.querySelector("#si-energy")?.addEventListener("click", () => this._moreInfo(this._entities.session_energy));
     this.querySelector("#si-phases")?.addEventListener("click", () => this._moreInfo(this._entities.current_l1));
     this.querySelector("#si-rfid")?.addEventListener("click", () => this._moreInfo(this._entities.session_energy));
+    this.querySelector("#si-duration")?.addEventListener("click", () => this._moreInfo(this._entities.session_energy));
     this.querySelector("#p-grid-row")?.addEventListener("click", () => this._moreInfo(this._entities.grid_power));
     this.querySelector("#p-pv-row")?.addEventListener("click", () => this._moreInfo(this._entities.pv_power));
     this.querySelector("#p-house-row")?.addEventListener("click", () => this._moreInfo(this._entities.house_power));
@@ -539,6 +542,27 @@ class SmappeeEvCard extends HTMLElement {
         this.querySelector("#s-phases").textContent  = phases > 0 ? `${phases}` : "—";
         const rfid = this._attr(e.session_energy, "rfid");
         this.querySelector("#s-rfid").textContent = rfid || "—";
+        const sessionTo = this._attr(e.session_energy, "to");
+        const sessionFrom = this._attr(e.session_energy, "from");
+        const duration = this._attr(e.session_energy, "duration_formatted");
+        const durationEl = this.querySelector("#s-duration");
+
+        // Stop vorige timer
+        if (this._durationTimer) { clearInterval(this._durationTimer); this._durationTimer = null; }
+
+        if (!sessionTo && sessionFrom && durationEl) {
+          const updateDuration = () => {
+            const elapsed = Math.floor((Date.now() - new Date(sessionFrom).getTime()) / 1000);
+            const h = Math.floor(elapsed / 3600).toString().padStart(2, "0");
+            const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, "0");
+            const s = (elapsed % 60).toString().padStart(2, "0");
+            durationEl.textContent = `${h}:${m}:${s}`;
+          };
+          updateDuration();
+          this._durationTimer = setInterval(updateDuration, 1000);
+        } else if (durationEl) {
+          durationEl.textContent = duration || "—";
+        }
       }
     }
 
@@ -645,6 +669,10 @@ class SmappeeEvCard extends HTMLElement {
   }
 
   getCardSize() { return 4; }
+
+  disconnectedCallback() {
+    if (this._durationTimer) { clearInterval(this._durationTimer); this._durationTimer = null; }
+  }
 }
 
 class SmappeeEvCardEditor extends HTMLElement {
