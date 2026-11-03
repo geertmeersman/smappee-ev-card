@@ -1,4 +1,4 @@
-const VERSION = "0.0.5";
+const VERSION = "0.2.0";
 
 class SmappeeEvCard extends HTMLElement {
   constructor() {
@@ -84,6 +84,7 @@ class SmappeeEvCard extends HTMLElement {
       charging:"Laden", available:"Beschikbaar", cable_connected:"Kabel verbonden",
       charging_finished:"Laden voltooid", error:"Fout", suspended_evse:"Onderbroken",
       initialize:"Initialiseren", start:"Start", pause:"Pauzeer het laden", resume:"Hervat het laden", stop:"Stop",
+      charging_at:"Bezig met laden aan",
       failsafe:"Noodstroom", failsafe_current:"Noodstroom limiet", offline_charging:"Laden zonder verbinding",
       station:"Station", restart:"Herstart station", led:"LED", station_available:"Station beschikbaar" };
     const de = { standard:"Standard", smart:"Smart", solar:"Solarenergie", session:"Sitzung",
@@ -92,6 +93,7 @@ class SmappeeEvCard extends HTMLElement {
       charging:"Lädt", available:"Verfügbar", cable_connected:"Kabel angeschlossen",
       charging_finished:"Ladevorgang abgeschlossen", error:"Fehler", suspended_evse:"Vom Ladegerät pausiert",
       initialize:"Initialisierung", start:"Start", pause:"Pause", resume:"Fortsetzen", stop:"Stopp",
+      charging_at:"Lädt mit",
       failsafe:"Ausfallsicherung", failsafe_current:"Ausfallstrom", offline_charging:"Laden ohne Verbindung",
       station:"Station", restart:"Station neu starten", led:"LED", station_available:"Station verfügbar" };
     const fr = { standard:"Standard", smart:"Intelligent", solar:"Solaire", session:"Session",
@@ -100,6 +102,7 @@ class SmappeeEvCard extends HTMLElement {
       charging:"En charge", available:"Disponible", cable_connected:"Câble connecté",
       charging_finished:"Charge terminée", error:"Erreur", suspended_evse:"Suspendu par le chargeur",
       initialize:"Initialisation", start:"Démarrer", pause:"Pause", resume:"Reprendre", stop:"Arrêter",
+      charging_at:"En charge à",
       failsafe:"Sécurité hors ligne", failsafe_current:"Courant de secours", offline_charging:"Charge hors ligne",
       station:"Station", restart:"Redémarrer la station", led:"LED", station_available:"Station disponible" };
     const en = { standard:"Standard", smart:"Smart", solar:"Solar", session:"Session",
@@ -108,6 +111,7 @@ class SmappeeEvCard extends HTMLElement {
       charging:"Charging", available:"Available", cable_connected:"Cable connected",
       charging_finished:"Charging finished", error:"Error", suspended_evse:"Suspended",
       initialize:"Initializing", start:"Start", pause:"Pause", resume:"Resume", stop:"Stop",
+      charging_at:"Charging at",
       failsafe:"Failsafe", failsafe_current:"Failsafe current", offline_charging:"Offline charging",
       station:"Station", restart:"Restart station", led:"LED", station_available:"Station available" };
     return ({nl, de, fr}[lang] || en)[k] || en[k] || k;
@@ -196,10 +200,15 @@ class SmappeeEvCard extends HTMLElement {
           .header-info{flex:1;min-width:0}
           .header-name{font-size:1em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
           .header-sub{font-size:0.8em;color:var(--secondary-text-color)}
-          .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:600}
+          .status-bar{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--divider-color)}
+          .status-bar ha-icon{--mdc-icon-size:20px;flex-shrink:0}
+          .status-text{font-size:0.9em;font-weight:500}
           .mqtt-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
           .clickable{cursor:pointer;}
           .clickable:hover{opacity:0.8;}
+          .ev-icon-wrap{position:relative;flex-shrink:0}
+          .ev-icon-wrap.charging::after{content:'';position:absolute;inset:-2px;border-radius:6px;animation:pulse-charging 3s ease-in-out infinite;pointer-events:none}
+          @keyframes pulse-charging{0%,100%{box-shadow:0 0 0 0 rgba(76,175,80,0.4)}50%{box-shadow:0 0 0 4px rgba(76,175,80,0)}}
           .section{padding:10px 14px;border-bottom:1px solid var(--divider-color)}
           .section:last-child{border-bottom:none}
           .section-label{font-size:0.72em;font-weight:700;color:var(--secondary-text-color);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px}
@@ -226,14 +235,20 @@ class SmappeeEvCard extends HTMLElement {
         </style>
         <div class="card">
           <div class="header">
-            <img src="/hacsfiles/smappee-ev-card/icon.png" style="width:28px;height:28px;flex-shrink:0;border-radius:4px" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><ha-icon icon="mdi:ev-station" style="--mdc-icon-size:28px;color:var(--primary-color);flex-shrink:0;display:none"></ha-icon>
+            <div class="ev-icon-wrap" id="ev-icon-wrap">
+            <img src="/hacsfiles/smappee-ev-card/icon.png" style="width:28px;height:28px;border-radius:4px" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><ha-icon icon="mdi:ev-station" style="--mdc-icon-size:28px;color:var(--primary-color);display:none"></ha-icon>
+            </div>
             <div class="header-info">
               <div class="header-name" id="dev-name"></div>
-              <div class="header-sub"><span class="badge clickable" id="evse-badge"></span></div>
             </div>
             <div style="display:flex;align-items:center;gap:4px;font-size:0.75em;color:var(--secondary-text-color);flex-shrink:0">
               <span class="mqtt-dot" id="mqtt-dot"></span>MQTT
             </div>
+          </div>
+
+          <div class="status-bar clickable" id="status-bar">
+            <ha-icon id="status-icon" style="--mdc-icon-size:20px"></ha-icon>
+            <span class="status-text" id="status-text"></span>
           </div>
 
           <div class="section">
@@ -374,6 +389,7 @@ class SmappeeEvCard extends HTMLElement {
     this.querySelector("#btn-stop")?.addEventListener("click",  () => this._callSwitch("turn_off"));
     this.querySelector("#p-capacity-row")?.addEventListener("click", () => this._moreInfo(this._entities.capacity_power));
     this.querySelector("#graph-overlay")?.addEventListener("click", () => this._moreInfo(this._entities.power));
+    this.querySelector("#status-bar")?.addEventListener("click", () => this._moreInfo(this._entities.evse_status));
     this.querySelector("#evse-badge")?.addEventListener("click", () => this._moreInfo(this._entities.evse_status));
     this.querySelector("#si-power")?.addEventListener("click", () => this._moreInfo(this._entities.power));
     this.querySelector("#si-current")?.addEventListener("click", () => this._moreInfo(this._entities.current));
@@ -471,11 +487,35 @@ class SmappeeEvCard extends HTMLElement {
     const nameEl = this.querySelector("#dev-name");
     if (nameEl) nameEl.textContent = this._deviceName();
 
+    const iconWrap = this.querySelector("#ev-icon-wrap");
+    if (iconWrap) iconWrap.classList.toggle("charging", isCharging);
+
     const badge = this.querySelector("#evse-badge");
     if (badge) {
       badge.textContent = this._t(evseStatus);
       badge.style.color = this._evseColor(evseStatus);
       badge.style.background = this._evseBg(evseStatus);
+    }
+
+    const statusIcon = this.querySelector("#status-icon");
+    const statusText = this.querySelector("#status-text");
+    const statusBar  = this.querySelector("#status-bar");
+    const statusIcons = {
+      charging: "mdi:lightning-bolt", available: "mdi:check-circle",
+      cable_connected: "mdi:power-plug", charging_finished: "mdi:battery-check",
+      suspended_evse: "mdi:pause-circle", error: "mdi:alert-circle", initialize: "mdi:timer-sand"
+    };
+    if (statusIcon) statusIcon.setAttribute("icon", statusIcons[evseStatus] || "mdi:ev-station");
+    if (statusIcon) statusIcon.style.color = this._evseColor(evseStatus);
+    if (statusBar)  statusBar.style.background = this._evseBg(evseStatus);
+    if (statusText) {
+      if (isCharging) {
+        const pw = this._fmtPower(this._val(e.power), e.power);
+        statusText.textContent = `${this._t("charging_at")} ${pw}`;
+      } else {
+        statusText.textContent = this._t(evseStatus);
+      }
+      statusText.style.color = this._evseColor(evseStatus);
     }
 
     const dot = this.querySelector("#mqtt-dot");
