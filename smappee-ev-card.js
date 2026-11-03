@@ -12,10 +12,10 @@ class SmappeeEvCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement("smappee-ev-card-editor"); }
-  static getStubConfig() { return { device_id: "", show_session: true, show_power: true, show_graph: true, show_failsafe: true, show_station: true }; }
+  static getStubConfig() { return { device_id: "", show_session: true, show_power: true, show_graph: true, show_failsafe: true, show_station: true, car_battery_entity: "" }; }
 
   setConfig(config) {
-    this._config = { show_session: true, show_power: true, show_graph: true, show_failsafe: true, show_station: true, ...config };
+    this._config = { show_session: true, show_power: true, show_graph: true, show_failsafe: true, show_station: true, car_battery_entity: "", ...config };
     this._entities = {};
     this._built = false;
     this._graphCard = null;
@@ -31,7 +31,8 @@ class SmappeeEvCard extends HTMLElement {
   }
 
   _changed(a, b) {
-    return Object.values(this._entities).filter(Boolean).some(id => a.states[id] !== b.states[id]);
+    const ids = [...Object.values(this._entities).filter(Boolean), this._config.car_battery_entity].filter(Boolean);
+    return ids.some(id => a.states[id] !== b.states[id]);
   }
 
   _entitiesForDevice(deviceId) {
@@ -201,6 +202,10 @@ class SmappeeEvCard extends HTMLElement {
           .header-info{flex:1;min-width:0}
           .header-name{font-size:1em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
           .header-sub{font-size:0.8em;color:var(--secondary-text-color)}
+          .battery-bar-wrap{padding:8px 16px 10px;border-bottom:1px solid var(--divider-color);display:none}
+          .battery-bar-label{display:flex;justify-content:space-between;font-size:0.72em;color:var(--secondary-text-color);margin-bottom:3px}
+          .battery-bar-track{height:6px;border-radius:3px;background:var(--divider-color);overflow:hidden}
+          .battery-bar-fill{height:100%;border-radius:3px;transition:width 0.4s ease}
           .status-bar{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--divider-color)}
           .status-bar ha-icon{--mdc-icon-size:20px;flex-shrink:0}
           .status-text{font-size:0.9em;font-weight:500}
@@ -236,15 +241,20 @@ class SmappeeEvCard extends HTMLElement {
         </style>
         <div class="card">
           <div class="header">
-            <div class="ev-icon-wrap" id="ev-icon-wrap">
+            <div class="ev-icon-wrap clickable" id="ev-icon-wrap">
             <img src="/hacsfiles/smappee-ev-card/icon.png" style="width:28px;height:28px;border-radius:4px" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><ha-icon icon="mdi:ev-station" style="--mdc-icon-size:28px;color:var(--primary-color);display:none"></ha-icon>
             </div>
             <div class="header-info">
-              <div class="header-name" id="dev-name"></div>
+              <div class="header-name clickable" id="dev-name"></div>
             </div>
             <div style="display:flex;align-items:center;gap:4px;font-size:0.75em;color:var(--secondary-text-color);flex-shrink:0">
               <span class="mqtt-dot" id="mqtt-dot"></span>MQTT
             </div>
+          </div>
+
+          <div class="battery-bar-wrap clickable" id="battery-bar-wrap">
+            <div class="battery-bar-label"><span id="battery-bar-name">🔋</span><span id="battery-bar-pct">—</span></div>
+            <div class="battery-bar-track"><div class="battery-bar-fill" id="battery-bar-fill" style="width:0%"></div></div>
           </div>
 
           <div class="status-bar clickable" id="status-bar">
@@ -403,6 +413,9 @@ class SmappeeEvCard extends HTMLElement {
     this.querySelector("#p-pv-row")?.addEventListener("click", () => this._moreInfo(this._entities.pv_power));
     this.querySelector("#p-house-row")?.addEventListener("click", () => this._moreInfo(this._entities.house_power));
     this.querySelector("#p-ev-row")?.addEventListener("click", () => this._moreInfo(this._entities.power));
+    this.querySelector("#battery-bar-wrap")?.addEventListener("click", () => this._moreInfo(this._config.car_battery_entity));
+    this.querySelector("#dev-name")?.addEventListener("click", () => this._moreInfo(this._entities.evse_status));
+    this.querySelector("#ev-icon-wrap")?.addEventListener("click", () => this._moreInfo(this._entities.evse_status));
 
     // Failsafe slider
     const fsSlider = this.querySelector("#fs-current-slider");
@@ -523,6 +536,26 @@ class SmappeeEvCard extends HTMLElement {
 
     const dot = this.querySelector("#mqtt-dot");
     if (dot) dot.style.background = mqttOn ? "var(--success-color,#4caf50)" : "var(--error-color,#e05c6a)";
+
+    // Car battery
+    const battWrap = this.querySelector("#battery-bar-wrap");
+    const battEntity = this._config.car_battery_entity;
+    console.log("[smappee] battery entity:", battEntity, "value:", this._val(battEntity), "wrap:", battWrap);
+    if (battWrap && battEntity) {
+      const pct = parseFloat(this._val(battEntity));
+      battWrap.style.display = isNaN(pct) ? "none" : "block";
+      if (!isNaN(pct)) {
+        const fill = this.querySelector("#battery-bar-fill");
+        const pctEl = this.querySelector("#battery-bar-pct");
+        const nameEl2 = this.querySelector("#battery-bar-name");
+        const color = pct >= 60 ? "var(--success-color,#4caf50)" : pct >= 25 ? "var(--warning-color,#e0956a)" : "var(--error-color,#e05c6a)";
+        if (fill) { fill.style.width = `${pct}%`; fill.style.background = color; }
+        if (pctEl) pctEl.textContent = `${Math.round(pct)} %`;
+        if (nameEl2) nameEl2.textContent = `🔋 ${this._hass?.states[battEntity]?.attributes?.friendly_name || battEntity}`;
+      }
+    } else if (battWrap) {
+      battWrap.style.display = "none";
+    }
 
     // Mode buttons
     ["standard","smart","solar"].forEach(m => {
@@ -710,10 +743,10 @@ class SmappeeEvCardEditor extends HTMLElement {
 
   _t(k) {
     const lang = (this._hass?.locale?.language || "en").slice(0, 2).toLowerCase();
-    const nl = { show_session:"Sessie tonen", show_power:"Vermogen tonen", show_graph:"Grafiek tonen", show_failsafe:"Noodstroom tonen", show_station:"Station tonen", device:"Apparaat" };
-    const de = { show_session:"Sitzung anzeigen", show_power:"Leistung anzeigen", show_graph:"Diagramm anzeigen", show_failsafe:"Ausfallsicherung anzeigen", show_station:"Station anzeigen", device:"Gerät" };
-    const fr = { show_session:"Afficher la session", show_power:"Afficher la puissance", show_graph:"Afficher le graphique", show_failsafe:"Afficher la sécurité", show_station:"Afficher la station", device:"Appareil" };
-    const en = { show_session:"Show session", show_power:"Show power", show_graph:"Show graph", show_failsafe:"Show failsafe", show_station:"Show station", device:"Device" };
+    const nl = { show_session:"Sessie tonen", show_power:"Vermogen tonen", show_graph:"Grafiek tonen", show_failsafe:"Noodstroom tonen", show_station:"Station tonen", device:"Apparaat", car_battery:"Auto batterij (optioneel)" };
+    const de = { show_session:"Sitzung anzeigen", show_power:"Leistung anzeigen", show_graph:"Diagramm anzeigen", show_failsafe:"Ausfallsicherung anzeigen", show_station:"Station anzeigen", device:"Gerät", car_battery:"Auto-Batterie (optional)" };
+    const fr = { show_session:"Afficher la session", show_power:"Afficher la puissance", show_graph:"Afficher le graphique", show_failsafe:"Afficher la sécurité", show_station:"Afficher la station", device:"Appareil", car_battery:"Batterie voiture (optionnel)" };
+    const en = { show_session:"Show session", show_power:"Show power", show_graph:"Show graph", show_failsafe:"Show failsafe", show_station:"Show station", device:"Device", car_battery:"Car battery (optional)" };
     return ({nl, de, fr}[lang] || en)[k] || en[k] || k;
   }
 
@@ -731,10 +764,18 @@ class SmappeeEvCardEditor extends HTMLElement {
         <option value="">— select —</option>
         ${devices.map(d => `<option value="${d.id}" ${this._config.device_id === d.id ? "selected" : ""}>${d.name}</option>`).join("")}
       </select>
+      <label>${this._t("car_battery")}</label>
+      <select id="battery-select">
+        <option value="">— none —</option>
+        ${Object.values(this._hass?.states || {}).filter(s => s.attributes?.device_class === "battery" && s.attributes?.unit_of_measurement === "%").map(s => `<option value="${s.entity_id}" ${this._config.car_battery_entity === s.entity_id ? "selected" : ""}>${s.attributes.friendly_name || s.entity_id}</option>`).join("")}
+      </select>
       ${toggles.map(([k,l]) => `<div class="toggle-row"><span>${l}</span><ha-switch id="${k}" ${this._config[k] !== false ? "checked" : ""}></ha-switch></div>`).join("")}`;
 
     this.querySelector("#device-select").addEventListener("change", e =>
       this._fire({ ...this._config, device_id: e.target.value })
+    );
+    this.querySelector("#battery-select").addEventListener("change", e =>
+      this._fire({ ...this._config, car_battery_entity: e.target.value })
     );
     toggles.forEach(([k]) =>
       this.querySelector(`#${k}`).addEventListener("change", e =>
