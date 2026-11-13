@@ -1,6 +1,6 @@
 {
   "name": "smappee-ev-card",
-  "version": "0.0.8",
+  "version": "0.0.12",
   "type": "module",
   "scripts": {
     "lint": "eslint smappee-ev-card.js",
