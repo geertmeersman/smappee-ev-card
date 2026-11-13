@@ -167,7 +167,6 @@ class SmappeeEvCard extends HTMLElement {
     if (!id) return;
     const num = Math.round(parseFloat(String(v)) * 10) / 10;
     const domain = id.split(".")[0];
-    console.log("set_value", domain, id, num, typeof num);
     await this._hass.callService(domain, "set_value", { entity_id: id, value: num });
   }
 
@@ -468,14 +467,12 @@ class SmappeeEvCard extends HTMLElement {
       surplusSlider.addEventListener("pointerup",   () => { this._sliding = false; });
       surplusSlider.addEventListener("input", ev => {
         const val = parseFloat(ev.target.value);
-        console.log("surplus input", ev.target.value, typeof ev.target.value, val);
         this.querySelector("#surplus-label-val").textContent = `${ev.target.value} %`;
         clearTimeout(debounce);
         debounce = setTimeout(() => {
           const id = this._entities.surplus_slider;
           if (!id) return;
           const domain = id.split(".")[0];
-          console.log("surplus set_value", domain, id, val, typeof val);
           this._hass.callService(domain, "set_value", { entity_id: id, value: val });
         }, 500);
       });
@@ -540,7 +537,6 @@ class SmappeeEvCard extends HTMLElement {
     // Car battery
     const battWrap = this.querySelector("#battery-bar-wrap");
     const battEntity = this._config.car_battery_entity;
-    console.log("[smappee] battery entity:", battEntity, "value:", this._val(battEntity), "wrap:", battWrap);
     if (battWrap && battEntity) {
       const pct = parseFloat(this._val(battEntity));
       battWrap.style.display = isNaN(pct) ? "none" : "block";
