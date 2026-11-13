@@ -52,7 +52,18 @@ jobs:
         with:
           add: "VERSION smappee-ev-card.js package.json"
           message: "chore(release): bump version to ${{ steps.release_published.outputs.tag_name }}"
-          push: true
+          new_branch: chore/version-bump-${{ steps.release_published.outputs.tag_name }}
+          push: --set-upstream origin chore/version-bump-${{ steps.release_published.outputs.tag_name }}
+
+      - name: 🔀 Open PR for version bump
+        run: |
+          gh pr create \
+            --title "chore(release): bump version to ${{ steps.release_published.outputs.tag_name }}" \
+            --body "Automated version bump after release ${{ steps.release_published.outputs.tag_name }}" \
+            --base main \
+            --head chore/version-bump-${{ steps.release_published.outputs.tag_name }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🚮 Remove pre-releases
         run: |
